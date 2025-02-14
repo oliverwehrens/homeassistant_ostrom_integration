@@ -18,7 +18,7 @@
             "unknown": "Unexpected error"
         },
         "abort": {
-            "already_configured": "Ostrom is already configured"
+            "already_configured": "Device is already configured"
         }
     },
     "entity": {
@@ -43,6 +43,26 @@
             },
             "ostrom_integration_highest_price_time": {
                 "name": "Highest Price Time"
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "client_id": "Client ID",
+                    "client_secret": "Client Secret",
+                    "zip_code": "ZIP Code",
+                    "environment": "Environment"
+                }
+            }
+        }
+    },
+    "selector": {
+        "environment": {
+            "options": {
+                "sandbox": "Sandbox",
+                "production": "Production"
             }
         }
     }

@@ -1,5 +1,6 @@
 """Config flow for Ostrom integration."""
 from homeassistant import config_entries
+from homeassistant.helpers import selector
 import voluptuous as vol
 import logging
 import requests
@@ -15,10 +16,16 @@ DATA_SCHEMA = vol.Schema({
     vol.Required("client_id"): str,
     vol.Required("client_secret"): str,
     vol.Required("zip_code"): str,
-    vol.Required("environment", default=ENV_PRODUCTION): vol.In({
-        ENV_SANDBOX: "Sandbox",
-        ENV_PRODUCTION: "Production"
-    }),
+    vol.Required("environment", default=ENV_PRODUCTION): selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(value=ENV_SANDBOX, label="selector.environment.options.sandbox"),
+                selector.SelectOptionDict(value=ENV_PRODUCTION, label="selector.environment.options.production"),
+            ],
+            translation_key="environment",
+            mode=selector.SelectSelectorMode.DROPDOWN
+        ),
+    ),
 })
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -120,20 +127,38 @@ class OstromOptionsFlowHandler(config_entries.OptionsFlow):
         errors = {}
 
         if user_input is not None:
-            # Update the config entry with new values
             return self.async_create_entry(title="", data=user_input)
 
-        # Use current values as defaults
+        schema = vol.Schema({
+            vol.Required(
+                "client_id",
+                description={"suggested_value": self.config_entry.data.get("client_id")}
+            ): str,
+            vol.Required(
+                "client_secret",
+                description={"suggested_value": self.config_entry.data.get("client_secret")}
+            ): str,
+            vol.Required(
+                "zip_code",
+                description={"suggested_value": self.config_entry.data.get("zip_code")}
+            ): str,
+            vol.Required(
+                "environment",
+                default=self.config_entry.data.get("environment", ENV_PRODUCTION)
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=ENV_SANDBOX, label="selector.environment.options.sandbox"),
+                        selector.SelectOptionDict(value=ENV_PRODUCTION, label="selector.environment.options.production"),
+                    ],
+                    translation_key="environment",
+                    mode=selector.SelectSelectorMode.DROPDOWN
+                ),
+            ),
+        })
+
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema({
-                vol.Required("client_id", default=self.config_entry.data.get("client_id")): str,
-                vol.Required("client_secret", default=self.config_entry.data.get("client_secret")): str,
-                vol.Required("zip_code", default=self.config_entry.data.get("zip_code")): str,
-                vol.Required("environment", default=self.config_entry.data.get("environment", ENV_PRODUCTION)): vol.In({
-                    ENV_SANDBOX: "Sandbox",
-                    ENV_PRODUCTION: "Production"
-                }),
-            }),
+            data_schema=schema,
             errors=errors
         ) 

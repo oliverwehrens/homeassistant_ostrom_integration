@@ -5,12 +5,15 @@
                 "title": "Ostrom Energy",
                 "description": "Ostrom Energy Preisüberwachung einrichten",
                 "data": {
-                    "client_id": "Client ID",
-                    "client_secret": "Client Secret",
+                    "client_id": "Client-ID",
+                    "client_secret": "Client-Secret",
                     "zip_code": "Postleitzahl",
                     "environment": "Umgebung"
                 }
             }
+        },
+        "abort": {
+            "already_configured": "Gerät ist bereits konfiguriert"
         },
         "error": {
             "cannot_connect": "Verbindung fehlgeschlagen",
@@ -47,6 +50,26 @@
             "ostrom_integration_highest_price_time": {
                 "name": "Zeit höchster Preis",
                 "state": "Zeit höchster Preis"
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "client_id": "Client-ID",
+                    "client_secret": "Client-Secret",
+                    "zip_code": "Postleitzahl",
+                    "environment": "Umgebung"
+                }
+            }
+        }
+    },
+    "selector": {
+        "environment": {
+            "options": {
+                "sandbox": "Testumgebung",
+                "production": "Produktionsumgebung"
             }
         }
     }
