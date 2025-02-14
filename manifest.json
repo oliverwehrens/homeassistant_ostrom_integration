@@ -1,7 +1,7 @@
 {
   "domain": "ostrom_integration",
   "name": "Ostrom Energy",
-  "documentation": "https://github.com/oliverwehrens/ostrom_integration",
+  "documentation": "https://github.com/oliverwehrens/homeassistant_ostrom_integration",
   "dependencies": [],
   "codeowners": ["@oliverwehrens"],
   "requirements": ["requests>=2.25.1"],
