@@ -2,6 +2,8 @@
 
 This integration allows you to monitor the price of electricity in your area. It pulls data from the Ostrom Energy API (https://production.ostrom-api.io/spot-prices) and displays it as sensors in Home Assistant. The documentation of the API can be found here: https://ostrom-api.readme.io/reference/.
 
+The API seems to provides prices until 11pm of that day. After 2pm it provides prices for up to 11pm of the day after.
+
 This integration will poll the API every hour (full hour) and update the sensors accordingly.
 
 ## 📈 Sensors
