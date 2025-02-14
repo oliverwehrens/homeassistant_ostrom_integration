@@ -27,7 +27,7 @@ SCAN_INTERVAL = timedelta(minutes=30)  # Update more frequently for better graph
 
 class PowerPriceData:
     """Stores power price data for forecasting."""
-    def __init__(self):
+    def __init__(self, local_tz):
         self.prices = {}  # Dictionary of datetime -> price (UTC)
         self._min_price = None
         self._max_price = None
@@ -36,14 +36,17 @@ class PowerPriceData:
         self.next_price = None
         self.lowest_price_time = None
         self.highest_price_time = None
+        self.local_tz = local_tz
 
     def add_entry(self, timestamp: datetime, price: float) -> None:
         """Add a price entry and update statistics."""
+        # Ensure timestamp is in UTC
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=ZoneInfo("UTC"))
         else:
             timestamp = timestamp.astimezone(ZoneInfo("UTC"))
         
+        # Round to the start of the hour
         clean_timestamp = timestamp.replace(minute=0, second=0, microsecond=0)
         self.prices[clean_timestamp] = price
         self._update_statistics()
@@ -66,12 +69,18 @@ class PowerPriceData:
         next_hour = now + timedelta(hours=1)
         self.next_price = self.prices.get(next_hour)
         
-        # Find times for min/max prices
+        # Find times for min/max prices, ensuring we keep timezone info
+        self.lowest_price_time = None
+        self.highest_price_time = None
         for time, price in self.prices.items():
-            if price == self._min_price:
-                self.lowest_price_time = time
-            if price == self._max_price:
-                self.highest_price_time = time
+            if price == self._min_price and (self.lowest_price_time is None or time < self.lowest_price_time):
+                self.lowest_price_time = time 
+            if price == self._max_price and (self.highest_price_time is None or time < self.highest_price_time):
+                self.highest_price_time = time 
+
+        # change highest and lowest price time to local timezone
+        self.lowest_price_time = self.lowest_price_time.astimezone(self.local_tz)
+        self.highest_price_time = self.highest_price_time.astimezone(self.local_tz)
 
     def get_current_price(self) -> Optional[float]:
         """Get the current hour's price."""
@@ -153,12 +162,17 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
     def _process_price_data(self, prices) -> PowerPriceData:
         """Process the raw price data into PowerPriceData structure."""
-        price_data = PowerPriceData()
+        price_data = PowerPriceData(self.local_tz)
 
         for price_entry in prices:
             try:
-                # Keep timestamps in UTC
+                # Parse timestamp and ensure UTC timezone
                 timestamp = datetime.fromisoformat(price_entry["date"].replace('Z', '+00:00'))
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=ZoneInfo("UTC"))
+                else:
+                    timestamp = timestamp.astimezone(ZoneInfo("UTC"))
+
                 total_price = (price_entry["grossKwhPrice"] + price_entry["grossKwhTaxAndLevies"]) / 100
                 
                 price_data.add_entry(
@@ -386,19 +400,27 @@ class OstromLowestPriceTimeSensor(CoordinatorEntity, SensorEntity):
         """Return the lowest price time in the device's local timezone."""
         if not self.coordinator.data or not self.coordinator.data.lowest_price_time:
             return None
+        
+        # Ensure UTC timezone if not set
         time = self.coordinator.data.lowest_price_time
-        if time.tzinfo != self.coordinator.local_tz:
-            time = time.astimezone(self.coordinator.local_tz)
-        return time
+        if time.tzinfo is None:
+            time = time.replace(tzinfo=ZoneInfo("UTC"))
+            
+        # Convert to local timezone
+        return time.astimezone(self.coordinator.local_tz)
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
         """Return formatted time as an attribute."""
         if not self.native_value:
             return {}
+            
+        local_time = self.native_value
         return {
-            "formatted_time": self.native_value.strftime("%I:%M %p"),
-            "time_date": self.native_value.strftime("%Y-%m-%d %H:%M:%S")
+            "formatted_time": local_time.strftime("%I:%M %p"),
+            "time_date": local_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "is_today": local_time.date() == datetime.now(self.coordinator.local_tz).date(),
+            "is_tomorrow": local_time.date() == (datetime.now(self.coordinator.local_tz) + timedelta(days=1)).date()
         }
 
 class OstromHighestPriceTimeSensor(CoordinatorEntity, SensorEntity):
@@ -417,17 +439,25 @@ class OstromHighestPriceTimeSensor(CoordinatorEntity, SensorEntity):
         """Return the highest price time in the device's local timezone."""
         if not self.coordinator.data or not self.coordinator.data.highest_price_time:
             return None
+        
+        # Ensure UTC timezone if not set
         time = self.coordinator.data.highest_price_time
-        if time.tzinfo != self.coordinator.local_tz:
-            time = time.astimezone(self.coordinator.local_tz)
-        return time
+        if time.tzinfo is None:
+            time = time.replace(tzinfo=ZoneInfo("UTC"))
+            
+        # Convert to local timezone
+        return time.astimezone(self.coordinator.local_tz)
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
         """Return formatted time as an attribute."""
         if not self.native_value:
             return {}
+            
+        local_time = self.native_value
         return {
-            "formatted_time": self.native_value.strftime("%I:%M %p"),
-            "time_date": self.native_value.strftime("%Y-%m-%d %H:%M:%S")
+            "formatted_time": local_time.strftime("%I:%M %p"),
+            "time_date": local_time.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "is_today": local_time.date() == datetime.now(self.coordinator.local_tz).date(),
+            "is_tomorrow": local_time.date() == (datetime.now(self.coordinator.local_tz) + timedelta(days=1)).date()
         }
