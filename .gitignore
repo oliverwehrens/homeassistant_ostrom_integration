@@ -1,2 +1,6 @@
 __pycache__/
 .venv
+
+# Keep brand assets
+!*/brand/
+!*/brand/*.png

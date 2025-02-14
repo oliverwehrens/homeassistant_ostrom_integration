@@ -205,11 +205,6 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
     """Sensor for price forecasting."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        # Add debug logging
-        _LOGGER.debug(
-            "Initializing sensor with language: %s", 
-            self.hass.config.language if hasattr(self.hass, 'config') else 'unknown'
-        )
         self._attr_has_entity_name = True
         self._attr_translation_key = "ostrom_integration_spot_price"
         self._attr_unique_id = f"ostrom_spot_price_{entry.data['zip_code']}"
@@ -246,19 +241,61 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
             return {}
 
         data = self.coordinator.data
-        now = datetime.now(ZoneInfo("UTC"))
         
-        # Format data for today and tomorrow separately
+        # Add all prices to attributes for easy querying
+        prices = {}
+        for timestamp, price in data.prices.items():
+            # Convert UTC to local time for easier use in automations
+            local_time = timestamp.astimezone(self.coordinator.local_tz)
+            prices[local_time.isoformat()] = round(price, 4)
+
         attributes = {
             "average_price": round(data._avg_price, 4),
             "min_price": round(data._min_price, 4),
             "max_price": round(data._max_price, 4),
             "next_price": round(data.next_price, 4) if data.next_price else None,
-            "lowest_price_time": data.lowest_price_time.isoformat() if data.lowest_price_time else None,
-            "highest_price_time": data.highest_price_time.isoformat() if data.highest_price_time else None,
+            "lowest_price_time": data.lowest_price_time.astimezone(self.coordinator.local_tz).isoformat() if data.lowest_price_time else None,
+            "highest_price_time": data.highest_price_time.astimezone(self.coordinator.local_tz).isoformat() if data.highest_price_time else None,
+            "prices": prices,  # Add all prices
+            "current_hour": datetime.now(self.coordinator.local_tz).strftime("%H:00"),
         }
 
         return attributes
+
+    def get_price_at_time(self, time_str: str) -> Optional[float]:
+        """Get price for a specific time (format: HH:MM)."""
+        if not self.coordinator.data:
+            return None
+
+        try:
+            # Parse the time string
+            now = datetime.now(self.coordinator.local_tz)
+            hour, minute = map(int, time_str.split(':'))
+            target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # If the time is in the past for today, assume tomorrow
+            if target_time < now:
+                target_time += timedelta(days=1)
+
+            # Convert to UTC for lookup
+            utc_time = target_time.astimezone(ZoneInfo("UTC"))
+            utc_time = utc_time.replace(minute=0)  # Round to hour
+
+            return self.coordinator.data.prices.get(utc_time)
+        except (ValueError, TypeError):
+            return None
+
+    def is_price_below(self, price_threshold: float, time_str: Optional[str] = None) -> bool:
+        """Check if price is below threshold at given time or current time."""
+        if time_str:
+            price = self.get_price_at_time(time_str)
+        else:
+            price = self.native_value
+            
+        if price is None:
+            return False
+            
+        return price <= price_threshold
 
 class OstromAveragePriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for average price."""
