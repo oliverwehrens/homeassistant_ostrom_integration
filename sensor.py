@@ -48,9 +48,11 @@ class PowerPriceData:
             self._max_price = max(prices)
             self._avg_price = sum(prices) / len(prices)
             
-            now = datetime.now().replace(minute=0, second=0, microsecond=0)
+            # Get current price using local time
+            now = datetime.now(ZoneInfo("UTC")).replace(minute=0, second=0, microsecond=0)
             self.current_price = self.prices.get(now)
             
+            # Get next hour's price
             next_hour = now + timedelta(hours=1)
             self.next_price = self.prices.get(next_hour)
             
@@ -61,6 +63,11 @@ class PowerPriceData:
                 if price == self._max_price:
                     self.highest_price_time = time
 
+    def get_current_price(self) -> Optional[float]:
+        """Get the current hour's price."""
+        now = datetime.now(ZoneInfo("UTC")).replace(minute=0, second=0, microsecond=0)
+        return self.prices.get(now)
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -69,7 +76,17 @@ async def async_setup_entry(
     coordinator = OstromDataCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     
-    async_add_entities([OstromForecastSensor(coordinator, entry)])
+    entities = [
+        OstromForecastSensor(coordinator, entry),
+        OstromAveragePriceSensor(coordinator, entry),
+        OstromMinPriceSensor(coordinator, entry),
+        OstromMaxPriceSensor(coordinator, entry),
+        OstromNextPriceSensor(coordinator, entry),
+        OstromLowestPriceTimeSensor(coordinator, entry),
+        OstromHighestPriceTimeSensor(coordinator, entry),
+    ]
+    
+    async_add_entities(entities)
 
 class OstromDataCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch Ostrom price data."""
@@ -172,19 +189,21 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
     """Sensor for price forecasting."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Ostrom Price Forecast"
-        self._attr_unique_id = f"ostrom_price_forecast_{entry.data['zip_code']}"
+        self._attr_name = "Ostrom Spot Price"
+        self._attr_unique_id = f"ostrom_spot_price_{entry.data['zip_code']}"
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.TOTAL
-        self._attr_native_unit_of_measurement = f"{CURRENCY_EURO}/kWh"
+        self._attr_native_unit_of_measurement = "EUR/kWh"
         self._attr_should_poll = False
+        self._attr_suggested_display_precision = 5
 
     @property
     def native_value(self) -> Optional[float]:
         """Return the current price."""
         if not self.coordinator.data:
             return None
-        return self.coordinator.data.current_price
+        current_price = self.coordinator.data.get_current_price()
+        return round(current_price, 4) if current_price is not None else None
 
     @property
     def extra_state_attributes(self):
@@ -193,10 +212,12 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
             return {}
 
         data = self.coordinator.data
+        
+        # Add all prices (including future) as attributes
         attributes = {
             "prices": {
                 k.isoformat(): round(v, 4) 
-                for k, v in data.prices.items()
+                for k, v in sorted(data.prices.items())  # Sort by timestamp
             },
             "average_price": round(data._avg_price, 4),
             "min_price": round(data._min_price, 4),
@@ -204,5 +225,103 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
             "next_price": round(data.next_price, 4) if data.next_price else None,
             "lowest_price_time": data.lowest_price_time.isoformat() if data.lowest_price_time else None,
             "highest_price_time": data.highest_price_time.isoformat() if data.highest_price_time else None,
+            "state_class": "measurement",
         }
+
         return attributes
+
+class OstromAveragePriceSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for average price."""
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_name = "Ostrom Average Price"
+        self._attr_unique_id = f"ostrom_average_price_{entry.data['zip_code']}"
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "EUR/kWh"
+        self._attr_suggested_display_precision = 5
+
+    @property
+    def native_value(self) -> Optional[float]:
+        if not self.coordinator.data:
+            return None
+        return round(self.coordinator.data._avg_price, 4) if self.coordinator.data._avg_price else None
+
+class OstromMinPriceSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for minimum price."""
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_name = "Ostrom Minimum Price"
+        self._attr_unique_id = f"ostrom_min_price_{entry.data['zip_code']}"
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "EUR/kWh"
+        self._attr_suggested_display_precision = 5
+
+    @property
+    def native_value(self) -> Optional[float]:
+        if not self.coordinator.data:
+            return None
+        return round(self.coordinator.data._min_price, 4) if self.coordinator.data._min_price else None
+
+class OstromMaxPriceSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for maximum price."""
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_name = "Ostrom Maximum Price"
+        self._attr_unique_id = f"ostrom_max_price_{entry.data['zip_code']}"
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "EUR/kWh"
+        self._attr_suggested_display_precision = 5
+
+    @property
+    def native_value(self) -> Optional[float]:
+        if not self.coordinator.data:
+            return None
+        return round(self.coordinator.data._max_price, 4) if self.coordinator.data._max_price else None
+
+class OstromNextPriceSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for next hour's price."""
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_name = "Ostrom Next Hour Price"
+        self._attr_unique_id = f"ostrom_next_price_{entry.data['zip_code']}"
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "EUR/kWh"
+        self._attr_suggested_display_precision = 5
+
+    @property
+    def native_value(self) -> Optional[float]:
+        if not self.coordinator.data:
+            return None
+        return round(self.coordinator.data.next_price, 4) if self.coordinator.data.next_price else None
+
+class OstromLowestPriceTimeSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for lowest price time."""
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_name = "Ostrom Lowest Price Time"
+        self._attr_unique_id = f"ostrom_lowest_price_time_{entry.data['zip_code']}"
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    @property
+    def native_value(self) -> Optional[datetime]:
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.lowest_price_time
+
+class OstromHighestPriceTimeSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for highest price time."""
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_name = "Ostrom Highest Price Time"
+        self._attr_unique_id = f"ostrom_highest_price_time_{entry.data['zip_code']}"
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    @property
+    def native_value(self) -> Optional[datetime]:
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.highest_price_time

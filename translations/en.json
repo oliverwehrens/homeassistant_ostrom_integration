@@ -1,0 +1,24 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Connect to Ostrom",
+                "description": "Please enter your Ostrom API credentials",
+                "data": {
+                    "client_id": "Client ID",
+                    "client_secret": "Client Secret",
+                    "zip_code": "ZIP Code",
+                    "environment": "Environment"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Failed to connect to Ostrom API. Please check your credentials.",
+            "invalid_auth": "Invalid authentication credentials.",
+            "unknown": "Unexpected error occurred."
+        },
+        "abort": {
+            "already_configured": "Ostrom is already configured"
+        }
+    }
+} 
