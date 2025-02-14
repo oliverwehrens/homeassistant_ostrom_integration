@@ -83,9 +83,10 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    """Set up the Ostrom sensor platform."""
     coordinator = OstromDataCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
     
+    # Create entities first
     entities = [
         OstromForecastSensor(coordinator, entry),
         OstromAveragePriceSensor(coordinator, entry),
@@ -96,7 +97,11 @@ async def async_setup_entry(
         OstromHighestPriceTimeSensor(coordinator, entry),
     ]
     
+    # Add entities before the first refresh
     async_add_entities(entities)
+    
+    # Schedule the first refresh instead of waiting for it
+    await coordinator.async_refresh()
 
 class OstromDataCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch Ostrom price data."""
@@ -198,7 +203,6 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_name = "Spot Price"
         self._attr_unique_id = f"ostrom_spot_price_{entry.data['zip_code']}"
-#        self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
         self._attr_should_poll = False
@@ -252,7 +256,6 @@ class OstromAveragePriceSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_name = "Average Price"
         self._attr_unique_id = f"ostrom_average_price_{entry.data['zip_code']}"
-#        self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
         self._attr_suggested_display_precision = 2
@@ -270,7 +273,6 @@ class OstromMinPriceSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_name = "Minimum Price"
         self._attr_unique_id = f"ostrom_min_price_{entry.data['zip_code']}"
- #       self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
         self._attr_suggested_display_precision = 2
@@ -288,7 +290,6 @@ class OstromMaxPriceSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_name = "Maximum Price"
         self._attr_unique_id = f"ostrom_max_price_{entry.data['zip_code']}"
- #       self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
         self._attr_suggested_display_precision = 2
@@ -306,7 +307,6 @@ class OstromNextPriceSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_name = "Next Hour Price"
         self._attr_unique_id = f"ostrom_next_price_{entry.data['zip_code']}"
-#        self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
         self._attr_suggested_display_precision = 2
