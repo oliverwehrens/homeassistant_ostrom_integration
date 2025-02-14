@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo  # Use zoneinfo instead of pytz
+from zoneinfo import ZoneInfo  
 import logging
 from typing import Optional
 import aiohttp
@@ -45,10 +45,12 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         self.zip_code = entry.data["zip_code"]
         self.environment = entry.data["environment"]
         self._access_token = None
+        self._token_expiration = None  # Store token expiration time
         self._env_prefix = "sandbox.ostrom-api.io" if self.environment == "sandbox" else "production.ostrom-api.io"
 
     async def _async_update_data(self):
-        if not self._access_token:
+        # Check if the token is still valid before fetching prices
+        if not self._access_token or datetime.utcnow() >= self._token_expiration:
             await self._get_access_token()
 
         try:
@@ -59,7 +61,10 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
     async def _get_access_token(self):
         try:
-            self._access_token = await get_access_token(self.client_id, self.client_secret, self.environment)
+            token_data = await get_access_token(self.client_id, self.client_secret, self.environment)
+            self._access_token = token_data["access_token"]
+            expires_in = token_data.get("expires_in", 3600)  # Default to 3600 seconds if not provided
+            self._token_expiration = datetime.utcnow() + timedelta(seconds=expires_in)
         except Exception as e:
             _LOGGER.error("Failed to get access token: %s", str(e))
             raise
@@ -101,10 +106,14 @@ class OstromPriceSensor(CoordinatorEntity, SensorEntity):
             local_tz = ZoneInfo(self.coordinator.hass.config.time_zone)
             local_time = datetime.now(local_tz)
             current_hour = local_time.strftime("%Y-%m-%dT%H:00:00.000Z")
+            _LOGGER.error("Current hour: %s, local tz: %s, local time: %s", current_hour, local_tz, local_time)
 
             # Get current hour's price
+            for price in self.coordinator.data:
+                _LOGGER.error("Now %s: Price for %s: %s", current_hour, price["date"], price["grossKwhPrice"] + price["grossKwhTaxAndLevies"])
+                
             current_price = next(
-                (price["grossKwhPrice"] + price["grossKwhTaxAndLevies"] for price in self.coordinator.data 
+                (round(price["grossKwhPrice"] + price["grossKwhTaxAndLevies"], 2) for price in self.coordinator.data 
                  if price["date"] == current_hour),
                 None
             )

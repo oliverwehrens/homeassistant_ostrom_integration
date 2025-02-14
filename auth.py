@@ -17,11 +17,12 @@ async def get_access_token(client_id, client_secret, environment):
                 response.raise_for_status()
                 data = await response.json()
                 access_token = data.get("access_token")
+                expires_in = data.get("expires_in", 3600)  # Default to 3600 seconds if not provided
                 if not access_token:
                     _LOGGER.error("Access token not found in the response: %s", data)
                     raise ValueError("Access token not found in the response")
                 _LOGGER.debug("Received access token: %s", access_token)
-                return access_token
+                return {"access_token": access_token, "expires_in": expires_in}
     except aiohttp.ClientError as e:
         _LOGGER.error("Error fetching access token: %s", str(e))
         raise 
