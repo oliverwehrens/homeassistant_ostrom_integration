@@ -23,25 +23,25 @@
     },
     "entity": {
         "sensor": {
-            "spot_price": {
+            "ostrom_integration_spot_price": {
                 "name": "Spot Price"
             },
-            "average_price": {
+            "ostrom_integration_average_price": {
                 "name": "Average Price"
             },
-            "lowest_price": {
+            "ostrom_integration_lowest_price": {
                 "name": "Lowest Price"
             },
-            "highest_price": {
+            "ostrom_integration_highest_price": {
                 "name": "Highest Price"
             },
-            "next_hour_price": {
+            "ostrom_integration_next_hour_price": {
                 "name": "Next Hour Price"
             },
-            "lowest_price_time": {
+            "ostrom_integration_lowest_price_time": {
                 "name": "Lowest Price Time"
             },
-            "highest_price_time": {
+            "ostrom_integration_highest_price_time": {
                 "name": "Highest Price Time"
             }
         }

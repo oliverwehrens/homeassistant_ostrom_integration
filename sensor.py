@@ -107,6 +107,10 @@ class OstromDataCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch Ostrom price data."""
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
         """Initialize coordinator."""
+        _LOGGER.error(
+            "Initializing coordinator with language: %s", 
+            hass.config.language if hasattr(hass, 'config') else 'unknown'
+        )
         super().__init__(
             hass,
             _LOGGER,
@@ -201,8 +205,13 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
     """Sensor for price forecasting."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
+        # Add debug logging
+        _LOGGER.debug(
+            "Initializing sensor with language: %s", 
+            self.hass.config.language if hasattr(self.hass, 'config') else 'unknown'
+        )
         self._attr_has_entity_name = True
-        self._attr_translation_key = "spot_price"
+        self._attr_translation_key = "ostrom_integration_spot_price"
         self._attr_unique_id = f"ostrom_spot_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -256,7 +265,7 @@ class OstromAveragePriceSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_translation_key = "average_price"
+        self._attr_translation_key = "ostrom_integration_average_price"
         self._attr_unique_id = f"ostrom_average_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -274,7 +283,7 @@ class OstromMinPriceSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_translation_key = "lowest_price"
+        self._attr_translation_key = "ostrom_integration_lowest_price"
         self._attr_unique_id = f"ostrom_min_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -292,7 +301,7 @@ class OstromMaxPriceSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_translation_key = "highest_price"
+        self._attr_translation_key = "ostrom_integration_highest_price"
         self._attr_unique_id = f"ostrom_max_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -310,12 +319,13 @@ class OstromNextPriceSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_translation_key = "next_hour_price"
+        self._attr_translation_key = "ostrom_integration_next_hour_price"
         self._attr_unique_id = f"ostrom_next_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
         self._attr_suggested_display_precision = 2
         self._attr_device_info = coordinator.device_info
+        self.entity_id = f"sensor.{DOMAIN}_{self._attr_translation_key}"
 
     @property
     def native_value(self) -> Optional[float]:
@@ -327,13 +337,12 @@ class OstromLowestPriceTimeSensor(CoordinatorEntity, SensorEntity):
     """Sensor for lowest price time."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Lowest Price Time"
         self._attr_unique_id = f"ostrom_lowest_price_time_{entry.data['zip_code']}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_device_info = coordinator.device_info
         self._attr_entity_registry_enabled_default = True
         self._attr_has_entity_name = True
-        self._attr_translation_key = "lowest_price_time"
+        self._attr_translation_key = "ostrom_integration_lowest_price_time"
 
     @property
     def native_value(self) -> Optional[datetime]:
@@ -359,13 +368,12 @@ class OstromHighestPriceTimeSensor(CoordinatorEntity, SensorEntity):
     """Sensor for highest price time."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Highest Price Time"
         self._attr_unique_id = f"ostrom_highest_price_time_{entry.data['zip_code']}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_device_info = coordinator.device_info
         self._attr_entity_registry_enabled_default = True
         self._attr_has_entity_name = True
-        self._attr_translation_key = "highest_price_time"
+        self._attr_translation_key = "ostrom_integration_highest_price_time"
 
     @property
     def native_value(self) -> Optional[datetime]:
