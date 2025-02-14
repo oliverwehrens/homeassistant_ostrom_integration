@@ -11,6 +11,16 @@ ENV_PRODUCTION = "production"
 
 _LOGGER = logging.getLogger(__name__)
 
+DATA_SCHEMA = vol.Schema({
+    vol.Required("client_id"): str,
+    vol.Required("client_secret"): str,
+    vol.Required("zip_code"): str,
+    vol.Required("environment", default=ENV_PRODUCTION): vol.In({
+        ENV_SANDBOX: "Sandbox",
+        ENV_PRODUCTION: "Production"
+    }),
+})
+
 @config_entries.HANDLERS.register(DOMAIN)
 class OstromConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Ostrom integration."""
@@ -45,27 +55,16 @@ class OstromConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Error during Ostrom validation: %s", str(e), exc_info=True)
                 errors["base"] = "cannot_connect"
 
-        # Show initial form
-        data_schema = vol.Schema({
-            vol.Required("client_id"): str,
-            vol.Required("client_secret"): str,
-            vol.Required("zip_code"): str,
-            vol.Required("environment", default=ENV_PRODUCTION): vol.In({
-                ENV_SANDBOX: "Sandbox",
-                ENV_PRODUCTION: "Production"
-            }),
-        })
-
         return self.async_show_form(
             step_id="user",
-            data_schema=data_schema,
+            data_schema=DATA_SCHEMA,
             errors=errors
         )
 
     @staticmethod
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return OstromOptionsFlowHandler(config_entry)
 
     def validate_credentials(self, client_id: str, client_secret: str, zip_code: str, environment: str) -> bool:
         """Validate the credentials."""
@@ -107,4 +106,34 @@ class OstromConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 type(e).__name__,
                 str(e)
             )
-            return False 
+            return False
+
+class OstromOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle Ostrom options."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        super().__init__(config_entry)
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options."""
+        errors = {}
+
+        if user_input is not None:
+            # Update the config entry with new values
+            return self.async_create_entry(title="", data=user_input)
+
+        # Use current values as defaults
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required("client_id", default=self.config_entry.data.get("client_id")): str,
+                vol.Required("client_secret", default=self.config_entry.data.get("client_secret")): str,
+                vol.Required("zip_code", default=self.config_entry.data.get("zip_code")): str,
+                vol.Required("environment", default=self.config_entry.data.get("environment", ENV_PRODUCTION)): vol.In({
+                    ENV_SANDBOX: "Sandbox",
+                    ENV_PRODUCTION: "Production"
+                }),
+            }),
+            errors=errors
+        ) 
