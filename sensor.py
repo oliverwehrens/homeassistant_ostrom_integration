@@ -201,7 +201,8 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
     """Sensor for price forecasting."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Spot Price"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "spot_price"
         self._attr_unique_id = f"ostrom_spot_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -254,7 +255,8 @@ class OstromAveragePriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for average price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Average Price"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "average_price"
         self._attr_unique_id = f"ostrom_average_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -271,7 +273,8 @@ class OstromMinPriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for minimum price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Lowest Price"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "lowest_price"
         self._attr_unique_id = f"ostrom_min_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -288,7 +291,8 @@ class OstromMaxPriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for maximum price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Highest Price"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "highest_price"
         self._attr_unique_id = f"ostrom_max_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -305,7 +309,8 @@ class OstromNextPriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for next hour's price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Next Hour Price"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "next_hour_price"
         self._attr_unique_id = f"ostrom_next_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"

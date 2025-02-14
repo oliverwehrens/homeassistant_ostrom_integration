@@ -1,0 +1,46 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Ostrom Energy",
+                "description": "Ostrom Energy Preisüberwachung einrichten",
+                "data": {
+                    "client_id": "Client ID",
+                    "client_secret": "Client Secret",
+                    "zip_code": "Postleitzahl",
+                    "environment": "Umgebung"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Verbindung fehlgeschlagen",
+            "invalid_auth": "Ungültige Authentifizierung",
+            "unknown": "Unerwarteter Fehler"
+        }
+    },
+    "entity": {
+        "sensor": {
+            "spot_price": {
+                "name": "Spotpreis"
+            },
+            "average_price": {
+                "name": "Durchschnittspreis"
+            },
+            "lowest_price": {
+                "name": "Niedrigster Preis"
+            },
+            "highest_price": {
+                "name": "Höchster Preis"
+            },
+            "next_hour_price": {
+                "name": "Preis nächste Stunde"
+            },
+            "lowest_price_time": {
+                "name": "Zeit niedrigster Preis"
+            },
+            "highest_price_time": {
+                "name": "Zeit höchster Preis"
+            }
+        }
+    }
+} 
