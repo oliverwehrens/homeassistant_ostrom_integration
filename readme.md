@@ -6,6 +6,8 @@ This integration will poll the API every hour (full hour) and update the sensors
 
 ## 📈 Sensors
 
+![Ostrom Sensors](https://github.com/oliverwehrens/homeassistant_ostrom_integration/blob/main/images/ostrom_sensors.png?raw=true)
+
 - OstromForecastSensor - current forecasted price
 - OstromAveragePriceSensor - average price of the day
 - OstromMinPriceSensor - lowest price of the day
@@ -17,8 +19,7 @@ This integration will poll the API every hour (full hour) and update the sensors
 ## 🔐 Credentials
 
 - You need to provide a client id and client secret to use this integration. You can get these from the Ostrom Developer Portal (https://developer.ostrom-api.io/).
-
-![Ostrom Developer Portal](./images/ostrom-client.png)
+![Ostrom Developer Portal](https://github.com/oliverwehrens/homeassistant_ostrom_integration/blob/main/images/ostrom_client.png?raw=true)
 
 ## 👨🏻‍🔧 Installation
 

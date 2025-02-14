@@ -214,7 +214,6 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             "resolution": "HOUR",
             "zip": self.zip_code
         }
-        print("Query with Params: ", params)
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, params=params) as response:
