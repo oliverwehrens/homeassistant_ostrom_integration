@@ -271,7 +271,7 @@ class OstromMinPriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for minimum price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Minimum Price"
+        self._attr_name = "Lowest Price"
         self._attr_unique_id = f"ostrom_min_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -288,7 +288,7 @@ class OstromMaxPriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for maximum price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Maximum Price"
+        self._attr_name = "Highest Price"
         self._attr_unique_id = f"ostrom_max_price_{entry.data['zip_code']}"
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = "€/kWh"
@@ -326,12 +326,29 @@ class OstromLowestPriceTimeSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"ostrom_lowest_price_time_{entry.data['zip_code']}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_device_info = coordinator.device_info
+        self._attr_entity_registry_enabled_default = True
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "lowest_price_time"
 
     @property
     def native_value(self) -> Optional[datetime]:
-        if not self.coordinator.data:
+        """Return the lowest price time in the device's local timezone."""
+        if not self.coordinator.data or not self.coordinator.data.lowest_price_time:
             return None
-        return self.coordinator.data.lowest_price_time
+        time = self.coordinator.data.lowest_price_time
+        if time.tzinfo != self.coordinator.local_tz:
+            time = time.astimezone(self.coordinator.local_tz)
+        return time
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return formatted time as an attribute."""
+        if not self.native_value:
+            return {}
+        return {
+            "formatted_time": self.native_value.strftime("%I:%M %p"),
+            "time_date": self.native_value.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 class OstromHighestPriceTimeSensor(CoordinatorEntity, SensorEntity):
     """Sensor for highest price time."""
@@ -341,9 +358,26 @@ class OstromHighestPriceTimeSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"ostrom_highest_price_time_{entry.data['zip_code']}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_device_info = coordinator.device_info
+        self._attr_entity_registry_enabled_default = True
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "highest_price_time"
 
     @property
     def native_value(self) -> Optional[datetime]:
-        if not self.coordinator.data:
+        """Return the highest price time in the device's local timezone."""
+        if not self.coordinator.data or not self.coordinator.data.highest_price_time:
             return None
-        return self.coordinator.data.highest_price_time
+        time = self.coordinator.data.highest_price_time
+        if time.tzinfo != self.coordinator.local_tz:
+            time = time.astimezone(self.coordinator.local_tz)
+        return time
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Return formatted time as an attribute."""
+        if not self.native_value:
+            return {}
+        return {
+            "formatted_time": self.native_value.strftime("%I:%M %p"),
+            "time_date": self.native_value.strftime("%Y-%m-%d %H:%M:%S")
+        }
