@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.const import CURRENCY_EURO
+from homeassistant.util import dt
 
 from . import DOMAIN
 from .auth import get_access_token
@@ -116,15 +117,17 @@ class OstromDataCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch Ostrom price data."""
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
         """Initialize coordinator."""
-        _LOGGER.error(
-            "Initializing coordinator with language: %s", 
-            hass.config.language if hasattr(hass, 'config') else 'unknown'
-        )
+        # Calculate time until next hour
+        now = dt.now()
+        next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        # Set initial update interval to time until next hour
+        initial_update_interval = (next_hour - now).total_seconds()
+
         super().__init__(
             hass,
             _LOGGER,
             name="Ostrom Price Data",
-            update_interval=SCAN_INTERVAL,
+            update_interval=timedelta(seconds=initial_update_interval),
         )
         self.client_id = entry.data["client_id"]
         self.client_secret = entry.data["client_secret"]
@@ -139,15 +142,19 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         self.device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name="Ostrom Energy",
-            manufacturer="Ostrom",
-            model="Price API",
-            sw_version="1.0.0",
+            manufacturer="Ostrom API",
+            model="Price Monitoring",
+            sw_version="0.8",
         )
 
     async def _async_update_data(self) -> PowerPriceData:
         """Fetch and process price data with proper error handling."""
         try:
             _LOGGER.debug("Starting data update for Ostrom integration")
+            
+            # After each update, set the update interval to 1 hour
+            self.update_interval = timedelta(hours=1)
+            
             if not self._access_token or datetime.now(ZoneInfo("UTC")) >= self._token_expiration:
                 _LOGGER.info("Access token expired or missing, requesting new token")
                 await self._get_access_token()
