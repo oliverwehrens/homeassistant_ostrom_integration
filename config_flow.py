@@ -1,17 +1,21 @@
+"""Config flow for Ostrom integration."""
 from homeassistant import config_entries
 import voluptuous as vol
 import logging
+import requests
 from . import DOMAIN
-from .auth import validate_auth
+from .auth import get_access_token
 
 ENV_SANDBOX = "sandbox"
 ENV_PRODUCTION = "production"
 
 _LOGGER = logging.getLogger(__name__)
 
+@config_entries.HANDLERS.register(DOMAIN)
 class OstromConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Ostrom integration."""
     VERSION = 1
+    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
@@ -19,22 +23,26 @@ class OstromConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
+                _LOGGER.debug("Validating Ostrom credentials: %s", user_input["client_id"])
                 valid = await self.hass.async_add_executor_job(
-                    validate_auth,
+                    self.validate_credentials,
                     user_input["client_id"],
                     user_input["client_secret"],
+                    user_input["zip_code"],
                     user_input["environment"]
                 )
                 
                 if valid:
+                    _LOGGER.info("Successfully configured Ostrom integration")
                     return self.async_create_entry(
                         title=f"Ostrom Energy ({user_input['zip_code']})",
                         data=user_input
                     )
                 else:
+                    _LOGGER.warning("Failed to validate Ostrom credentials")
                     errors["base"] = "cannot_connect"
             except Exception as e:
-                _LOGGER.error("Error during validation: %s", str(e))
+                _LOGGER.error("Error during Ostrom validation: %s", str(e), exc_info=True)
                 errors["base"] = "cannot_connect"
 
         # Show initial form
@@ -60,18 +68,25 @@ class OstromConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return OptionsFlowHandler(config_entry)
 
     def validate_credentials(self, client_id: str, client_secret: str, zip_code: str, environment: str) -> bool:
+        """Validate the credentials."""
         try:
-            env_prefix = "production" if environment == ENV_PRODUCTION else ENV_SANDBOX
-            auth_url = f"https://auth.{env_prefix}.ostrom-api.io/oauth2/token"
-
+            env_prefix = f"{environment}.ostrom-api.io"
+            auth_url = f"https://auth.{env_prefix}/oauth2/token"
             
-            access_token = get_access_token(client_id, client_secret, auth_url)
+            auth = requests.auth.HTTPBasicAuth(client_id, client_secret)
+            payload = {"grant_type": "client_credentials"}
+            
+            response = requests.post(auth_url, auth=auth, data=payload)
+            response.raise_for_status()
+            data = response.json()
+            access_token = data.get("access_token")
+            
             if not access_token:
                 _LOGGER.error("Access token not found in the response.")
                 return False
             
             # Validate token with /me endpoint
-            me_url = f"https://{env_prefix}.ostrom-api.io/me"
+            me_url = f"https://{env_prefix}/me"
             headers = {"Authorization": f"Bearer {access_token}"}
             response = requests.get(me_url, headers=headers)
             

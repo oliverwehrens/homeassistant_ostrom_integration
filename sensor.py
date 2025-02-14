@@ -17,7 +17,10 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.const import CURRENCY_EURO
+
+from . import DOMAIN
 from .auth import get_access_token
+from homeassistant.helpers.entity import DeviceInfo
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=30)  # Update more frequently for better graphs
@@ -98,6 +101,7 @@ async def async_setup_entry(
 class OstromDataCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch Ostrom price data."""
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry):
+        """Initialize coordinator."""
         super().__init__(
             hass,
             _LOGGER,
@@ -112,17 +116,30 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         self._token_expiration = None
         self._env_prefix = "sandbox.ostrom-api.io" if self.environment == "sandbox" else "production.ostrom-api.io"
         self.local_tz = ZoneInfo(hass.config.time_zone)
+        
+        # Add device info
+        self.device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Ostrom Energy",
+            manufacturer="Ostrom",
+            model="Price API",
+            sw_version="1.0.0",
+        )
 
     async def _async_update_data(self) -> PowerPriceData:
         """Fetch and process price data with proper error handling."""
         try:
+            _LOGGER.debug("Starting data update for Ostrom integration")
             if not self._access_token or datetime.now(ZoneInfo("UTC")) >= self._token_expiration:
+                _LOGGER.info("Access token expired or missing, requesting new token")
                 await self._get_access_token()
 
             raw_data = await self._fetch_prices()
-            return self._process_price_data(raw_data)
+            processed_data = self._process_price_data(raw_data)
+            _LOGGER.debug("Successfully updated Ostrom price data")
+            return processed_data
         except Exception as err:
-            _LOGGER.error("Error updating price data: %s", err)
+            _LOGGER.error("Error updating Ostrom price data: %s", err, exc_info=True)
             raise UpdateFailed(f"Error fetching data: {err}") from err
 
     def _process_price_data(self, prices) -> PowerPriceData:
@@ -179,13 +196,14 @@ class OstromForecastSensor(CoordinatorEntity, SensorEntity):
     """Sensor for price forecasting."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Ostrom Spot Price"
+        self._attr_name = "Spot Price"
         self._attr_unique_id = f"ostrom_spot_price_{entry.data['zip_code']}"
 #        self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = "EUR/kWh"
+        self._attr_native_unit_of_measurement = "€/kWh"
         self._attr_should_poll = False
-        self._attr_suggested_display_precision = 5
+        self._attr_suggested_display_precision = 2
+        self._attr_device_info = coordinator.device_info
 
     @property
     def force_update(self) -> bool:
@@ -232,12 +250,13 @@ class OstromAveragePriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for average price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Ostrom Average Price"
+        self._attr_name = "Average Price"
         self._attr_unique_id = f"ostrom_average_price_{entry.data['zip_code']}"
 #        self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = "EUR/kWh"
-        self._attr_suggested_display_precision = 5
+        self._attr_native_unit_of_measurement = "€/kWh"
+        self._attr_suggested_display_precision = 2
+        self._attr_device_info = coordinator.device_info
 
     @property
     def native_value(self) -> Optional[float]:
@@ -249,12 +268,13 @@ class OstromMinPriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for minimum price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Ostrom Minimum Price"
+        self._attr_name = "Minimum Price"
         self._attr_unique_id = f"ostrom_min_price_{entry.data['zip_code']}"
  #       self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = "EUR/kWh"
-        self._attr_suggested_display_precision = 5
+        self._attr_native_unit_of_measurement = "€/kWh"
+        self._attr_suggested_display_precision = 2
+        self._attr_device_info = coordinator.device_info
 
     @property
     def native_value(self) -> Optional[float]:
@@ -266,12 +286,13 @@ class OstromMaxPriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for maximum price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Ostrom Maximum Price"
+        self._attr_name = "Maximum Price"
         self._attr_unique_id = f"ostrom_max_price_{entry.data['zip_code']}"
  #       self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = "EUR/kWh"
-        self._attr_suggested_display_precision = 5
+        self._attr_native_unit_of_measurement = "€/kWh"
+        self._attr_suggested_display_precision = 2
+        self._attr_device_info = coordinator.device_info
 
     @property
     def native_value(self) -> Optional[float]:
@@ -283,12 +304,13 @@ class OstromNextPriceSensor(CoordinatorEntity, SensorEntity):
     """Sensor for next hour's price."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Ostrom Next Hour Price"
+        self._attr_name = "Next Hour Price"
         self._attr_unique_id = f"ostrom_next_price_{entry.data['zip_code']}"
 #        self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = "EUR/kWh"
-        self._attr_suggested_display_precision = 5
+        self._attr_native_unit_of_measurement = "€/kWh"
+        self._attr_suggested_display_precision = 2
+        self._attr_device_info = coordinator.device_info
 
     @property
     def native_value(self) -> Optional[float]:
@@ -300,9 +322,10 @@ class OstromLowestPriceTimeSensor(CoordinatorEntity, SensorEntity):
     """Sensor for lowest price time."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Ostrom Lowest Price Time"
+        self._attr_name = "Lowest Price Time"
         self._attr_unique_id = f"ostrom_lowest_price_time_{entry.data['zip_code']}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        self._attr_device_info = coordinator.device_info
 
     @property
     def native_value(self) -> Optional[datetime]:
@@ -314,9 +337,10 @@ class OstromHighestPriceTimeSensor(CoordinatorEntity, SensorEntity):
     """Sensor for highest price time."""
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
-        self._attr_name = "Ostrom Highest Price Time"
+        self._attr_name = "Highest Price Time"
         self._attr_unique_id = f"ostrom_highest_price_time_{entry.data['zip_code']}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        self._attr_device_info = coordinator.device_info
 
     @property
     def native_value(self) -> Optional[datetime]:
