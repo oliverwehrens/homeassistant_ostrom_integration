@@ -1,54 +1,63 @@
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
 import voluptuous as vol
-import requests
 import logging
-from . import DOMAIN  # Ensure DOMAIN is imported correctly
-from requests.auth import HTTPBasicAuth
-from .auth import get_access_token
+from . import DOMAIN
+from .auth import validate_auth
 
 ENV_SANDBOX = "sandbox"
 ENV_PRODUCTION = "production"
 
 _LOGGER = logging.getLogger(__name__)
 
-
 class OstromConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Ostrom integration."""
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
+        """Handle the initial step."""
         errors = {}
-        
+
         if user_input is not None:
-            valid = await self.hass.async_add_executor_job(
-                self.validate_credentials,
-                user_input["client_id"],
-                user_input["client_secret"],
-                user_input["zip_code"],
-                user_input["environment"]
-            )
-            
-            if valid:
-                return self.async_create_entry(
-                    title="Ostrom Energy",
-                    data=user_input
+            try:
+                valid = await self.hass.async_add_executor_job(
+                    validate_auth,
+                    user_input["client_id"],
+                    user_input["client_secret"],
+                    user_input["environment"]
                 )
-            else:
-                errors["base"] = "invalid_auth"
+                
+                if valid:
+                    return self.async_create_entry(
+                        title=f"Ostrom Energy ({user_input['zip_code']})",
+                        data=user_input
+                    )
+                else:
+                    errors["base"] = "cannot_connect"
+            except Exception as e:
+                _LOGGER.error("Error during validation: %s", str(e))
+                errors["base"] = "cannot_connect"
+
+        # Show initial form
+        data_schema = vol.Schema({
+            vol.Required("client_id"): str,
+            vol.Required("client_secret"): str,
+            vol.Required("zip_code"): str,
+            vol.Required("environment", default=ENV_PRODUCTION): vol.In({
+                ENV_SANDBOX: "Sandbox",
+                ENV_PRODUCTION: "Production"
+            }),
+        })
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({
-                vol.Required("client_id"): str,
-                vol.Required("client_secret"): str,
-                vol.Required("zip_code"): str,
-                vol.Required("environment", default=ENV_SANDBOX): vol.In({
-                    ENV_SANDBOX: "Sandbox",
-                    ENV_PRODUCTION: "Production"
-                }),
-            }),
+            data_schema=data_schema,
             errors=errors
         )
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        """Get the options flow for this handler."""
+        return OptionsFlowHandler(config_entry)
 
     def validate_credentials(self, client_id: str, client_secret: str, zip_code: str, environment: str) -> bool:
         try:
