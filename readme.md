@@ -45,6 +45,7 @@ ostrom_integration:
 ## 📋 TODO
 
 - Add the forecasted price as statistic diagram, not only as attributes of the sensor.
+- Evaluate to use https://github.com/MFueg/pyOstrom for the API calls.
 
 ## ❤️ Pull Request
 
@@ -54,3 +55,9 @@ Are welcome!
 
 This project is licensed under the MIT License. See the LICENSE file for details.
 
+## Other Integrations
+
+Not tested yet.
+
+- https://github.com/ChrisCarde/homeassistant-ostrom
+- https://github.com/melmager/ha_ostrom
