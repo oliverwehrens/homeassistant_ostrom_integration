@@ -45,7 +45,6 @@ ostrom_integration:
 ## 📋 TODO
 
 - Add the forecasted price as statistic diagram, not only as attributes of the sensor.
-- Evaluate to use https://github.com/MFueg/pyOstrom for the API calls.
 
 ## ❤️ Pull Request
 
