@@ -155,12 +155,7 @@ Add it to HACS manually:
 
 ### Manually
 
-- Copy the `ostrom_integration` folder to your `config/custom_components` folder. 
-  - You need to have access to the terminal in Home Assistant
- ```
-cd /root/homeassistant/custom_components
-git clone https://github.com/oliverwehrens/homeassistant_ostrom_integration.git   
-```
+- Copy the `ostrom_integration` folder to your `config/custom_components` folder.
 - Restart Home Assistant.
 - Configure the integration in the Home Assistant configuration.
 - Use your client id, client secret and Zip Codefrom the Ostrom Developer Portal to configure the client
