@@ -1,5 +1,7 @@
 {
-    "name": "Ostrom Energy",
+    "name": "Ostrom",
     "render_readme": true,
+    "domain": "ostrom",
+    "country": "global",
     "homeassistant": "2023.9.0"
   }

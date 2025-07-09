@@ -1,12 +1,12 @@
 {
-  "domain": "ostrom_integration",
-  "name": "Ostrom Energy",
+  "domain": "ostrom",
+  "name": "Ostrom Integration",
   "documentation": "https://github.com/oliverwehrens/homeassistant_ostrom_integration",
   "dependencies": [],
   "codeowners": ["@oliverwehrens"],
   "requirements": ["requests>=2.25.1"],
   "config_flow": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "iot_class": "cloud_polling",
   "icon": "mdi:flash"
 } 

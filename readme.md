@@ -141,7 +141,19 @@ yaxis:
 
 ## 👨🏻‍🔧 Installation
 
-- Copy the `ostrom_integration` folder to your `config/custom_components` folder.
+### Via HACS
+
+[Add to Home Assistant](https://my.home-assistant.io/redirect/hacs_repository/?owner=oliverwehrens&repository=homeassistant_ostrom_integration&category=integration)
+
+
+### Manually
+
+- Copy the `ostrom_integration` folder to your `config/custom_components` folder. 
+  - You need to have access to the terminal in Home Assistant
+ ```
+cd /root/homeassistant/custom_components
+git clone https://github.com/oliverwehrens/homeassistant_ostrom_integration.git   
+```
 - Restart Home Assistant.
 - Configure the integration in the Home Assistant configuration.
 - Use your client id, client secret and Zip Codefrom the Ostrom Developer Portal to configure the client
