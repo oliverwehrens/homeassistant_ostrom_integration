@@ -80,9 +80,6 @@ yaxis:
     max: 0.5
 ```
 
-![](https://github.com/oliverwehrens/homeassistant_ostrom_integration/blob/main/images/chart1.png?raw=true)
-
-
 ```yaml
  type: custom:apexcharts-card
 graph_span: 24h
@@ -134,7 +131,8 @@ yaxis:
     max: 0.5
   ```
 
-![](https://github.com/oliverwehrens/homeassistant_ostrom_integration/blob/main/images/chart2.png?raw=true)
+![](https://github.com/oliverwehrens/homeassistant_ostrom_integration/blob/main/images/chart1.png?raw=true)
+
 
 ## 🔐 Credentials
 
