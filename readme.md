@@ -146,6 +146,13 @@ yaxis:
 [Add to Home Assistant](https://my.home-assistant.io/redirect/hacs_repository/?owner=oliverwehrens&repository=homeassistant_ostrom_integration&category=integration)
 
 
+Add it to HACS manually:
+
+- Home Assistant → HACS > Integrations
+- Top-right ⋮ → Custom repositories
+- URL: https://github.com/oliverwehrens/homeassistant_ostrom_integration
+- Category: Integration
+
 ### Manually
 
 - Copy the `ostrom_integration` folder to your `config/custom_components` folder. 
