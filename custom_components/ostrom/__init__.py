@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
 
 _LOGGER = logging.getLogger(__name__)
-DOMAIN = "ostrom_integration"
+DOMAIN = "ostrom"
 PLATFORMS = [Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -22,6 +22,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Ostrom component."""
     _LOGGER.info("Setting up Ostrom integration")
-    hass.states.async_set("ostrom_integration.status", "running")
+    hass.states.async_set("ostrom.status", "running")
     hass.data.setdefault(DOMAIN, {})
     return True 
