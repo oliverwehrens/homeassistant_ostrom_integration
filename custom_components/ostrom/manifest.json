@@ -6,7 +6,7 @@
   "codeowners": ["@oliverwehrens"],
   "requirements": ["requests>=2.25.1"],
   "config_flow": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "iot_class": "cloud_polling",
   "icon": "mdi:flash"
 } 
