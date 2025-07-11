@@ -160,17 +160,6 @@ Add it to HACS manually:
 - Configure the integration in the Home Assistant configuration.
 - Use your client id, client secret and Zip Codefrom the Ostrom Developer Portal to configure the client
 
-### 📝 Configuration YAML
-
-This is not tested yet :).
-
-```yaml
-ostrom_integration:
-  client_id: "your_client_id"
-  client_secret: "your_client_secret"
-  zip_code: "your_zip_code"
-```
-
 
 ## 📋 TODO
 
