@@ -341,7 +341,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                     StatisticData(
                         start=local_time,
                         state=kwh,
-                        mean=kwh,  # Use mean for hourly consumption values
+                        sum=kwh,  # Use sum for energy consumption
                     )
                 )
 
@@ -351,8 +351,8 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         if statistics:
             # Add statistics to recorder
             metadata = StatisticMetaData(
-                has_mean=False,
-                has_sum=False,
+                has_mean=True,
+                has_sum=True,
                 name="Ostrom Hourly Energy Consumption",
                 source=DOMAIN,
                 statistic_id=statistic_id,
@@ -426,7 +426,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             local_target_time = target_time.astimezone(self.local_tz)
 
             # Query statistics for that specific hour
-            statistic_id = f"${DOMAIN}:ostrom_hourly_consumption_energy"
+            statistic_id = f"{DOMAIN}:ostrom_hourly_consumption_energy"
 
             # Get statistics for the target hour (1 hour period)
             start_time = local_target_time
@@ -455,7 +455,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             _LOGGER.warning("Fetching historical data for %s", self.contract_id)
 
             # Check if we have any statistics for this sensor
-            statistic_id = f"${DOMAIN}:ostrom_hourly_consumption_energy"
+            statistic_id = f"{DOMAIN}:ostrom_hourly_consumption_energy"
 
             # Get the last recorded statistic to see what data we already have
             recorder = get_instance(self.hass)
