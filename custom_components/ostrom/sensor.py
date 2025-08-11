@@ -1,30 +1,26 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 import aiohttp
 from homeassistant.components.sensor import (
-    SensorEntity,
-    SensorStateClass,
-    SensorDeviceClass,
+    SensorEntity, SensorStateClass, SensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
+    CoordinatorEntity, DataUpdateCoordinator, UpdateFailed,
 )
 from homeassistant.const import CURRENCY_EURO, UnitOfEnergy
 from homeassistant.util import dt
 from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+from homeassistant.components.recorder.models import (
+    StatisticData, StatisticMetaData, StatisticMeanType
+)
 from homeassistant.components.recorder.statistics import (
-    async_import_statistics,
-    async_add_external_statistics,
-    get_last_statistics,
-    statistics_during_period)
+    async_import_statistics, async_add_external_statistics,
+    get_last_statistics, statistics_during_period)
 
 from . import DOMAIN
 from .auth import get_access_token
@@ -257,7 +253,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
     def _calculate_end_time(self, delta_hours: int = 24) -> datetime:
         """Calculate end time based on current time minus delta hours, rounded to hour."""
-        now = datetime.now(ZoneInfo("UTC"))
+        now = datetime.now(self.local_tz)
         end_time = now - timedelta(hours=delta_hours)
         return end_time.replace(minute=0, second=0, microsecond=0)
 
@@ -279,14 +275,14 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
         # Ensure both datetimes are in UTC
         if start_datetime.tzinfo is None:
-            start_datetime = start_datetime.replace(tzinfo=ZoneInfo("UTC"))
+            start_datetime = start_datetime.replace(tzinfo=self.local_tz)
         else:
-            start_datetime = start_datetime.astimezone(ZoneInfo("UTC"))
+            start_datetime = start_datetime.astimezone(self.local_tz)
 
         if end_datetime.tzinfo is None:
-            end_datetime = end_datetime.replace(tzinfo=ZoneInfo("UTC"))
+            end_datetime = end_datetime.replace(tzinfo=self.local_tz)
         else:
-            end_datetime = end_datetime.astimezone(ZoneInfo("UTC"))
+            end_datetime = end_datetime.astimezone(self.local_tz)
 
         url = f"https://{self._env_prefix}/contracts/{self.contract_id}/energy-consumption"
         headers = {"Authorization": f"Bearer {self._access_token}"}
@@ -302,7 +298,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                 data = await response.json()
                 return data
 
-    async def _store_usage_to_stats(self, consumption_data):
+    async def _store_usage_to_stats(self, consumption_data, initial_sum = 0):
         """Process historical consumption data and add hourly statistics to recorder."""
         if not isinstance(consumption_data, dict) or "data" not in consumption_data:
             return
@@ -316,7 +312,8 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
         # Prepare statistics data - each hour is an individual measurement
         statistics = []
-
+        sum_overall = initial_sum
+        
         for entry in hourly_data:
             if not isinstance(entry, dict) or "date" not in entry or "kWh" not in entry:
                 continue
@@ -327,23 +324,26 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                 if date_str.endswith("Z"):
                     date_str = date_str[:-1] + "+00:00"
                 timestamp = datetime.fromisoformat(date_str)
+                # Ensure timestamp has timezone info
                 if timestamp.tzinfo is None:
-                    timestamp = timestamp.replace(tzinfo=ZoneInfo("UTC"))
-
-                # Convert to local time for statistics
-                local_time = timestamp.astimezone(self.local_tz)
-
+                    timestamp = timestamp.replace(tzinfo=self.local_tz)
+                else:
+                    timestamp = timestamp.astimezone(self.local_tz)
+                    
                 # Each hour's consumption as individual statistic
-                kwh = entry["kWh"]
-
+                kwh = cast(float, entry["kWh"])
+                
                 # Create statistic data point for this hour's consumption
+                _LOGGER.debug("Creating statistic data point for %s: %s kWh : %s Wh", timestamp, kwh, sum_overall)
+
                 statistics.append(
                     StatisticData(
-                        start=local_time,
+                        start=timestamp,
                         state=kwh,
-                        sum=kwh,  # Use sum for energy consumption
+                        sum=sum_overall,  # Use sum for energy consumption
                     )
                 )
+                sum_overall = sum_overall + (kwh * 1000)  # Convert kWh to Wh for statistics
 
             except Exception as e:
                 _LOGGER.warning("Error processing consumption entry: %s", e)
@@ -351,12 +351,12 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         if statistics:
             # Add statistics to recorder
             metadata = StatisticMetaData(
-                has_mean=True,
+                mean_type=StatisticMeanType.NONE,
                 has_sum=True,
                 name="Ostrom Hourly Energy Consumption",
                 source=DOMAIN,
                 statistic_id=statistic_id,
-                unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+                unit_of_measurement=UnitOfEnergy.WATT_HOUR,
             )
 
             try:
@@ -367,7 +367,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             except Exception as e:
                 _LOGGER.error("Failed to add hourly statistics: %s", e)
 
-    async def _fetch_data_in_chunks(self, start_time, end_time, max_days_per_chunk):
+    async def _fetch_data_in_chunks(self, start_time, end_time, max_days_per_chunk, last_stat_sum):
         """Fetch data in chunks of maximum max_days_per_chunk days."""
         total_hours_fetched = 0
         current_start = start_time
@@ -375,7 +375,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         while current_start < end_time:
             # Calculate chunk end time (max_days_per_chunk days after current_start or end_time, whichever is smaller)
             chunk_end = min(
-                current_start + timedelta(days=max_days_per_chunk), end_time
+                (current_start + timedelta(days=max_days_per_chunk)).replace(hour=23, minute=59, second=59, microsecond=0), end_time
             )
 
             try:
@@ -386,7 +386,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
                 if consumption_data and consumption_data.get("data"):
                     # Store the fetched data
-                    await self._store_usage_to_stats(consumption_data)
+                    await self._store_usage_to_stats(consumption_data, last_stat_sum if current_start == start_time else 0)
 
                     # Count hours fetched
                     hourly_data = consumption_data["data"]
@@ -470,22 +470,34 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
             if last_stats:
                 # We have existing data - fetch delta from last recorded time to end_time
-                _LOGGER.info("Found consumption data. Fetching just delta")
+                _LOGGER.info("Found consumption data. Fetching just delta: %s", last_stats)
 
                 # Extract the last recorded timestamp
                 last_stat_entry = list(last_stats.values())[0][
                     0
                 ]  # First (and only) statistic entry
                 last_stat_time = last_stat_entry["start"]
+                # last_stat_sum = last_stat_entry["sum"]
 
-                # Convert to UTC for API call
-                if last_stat_time.tzinfo is None:
-                    last_stat_time = last_stat_time.replace(tzinfo=self.local_tz)
-                start_time = last_stat_time.astimezone(ZoneInfo("UTC"))
-
+                # Convert timestamp to datetime if it's a float/int
+                if isinstance(last_stat_time, (int, float)):
+                    last_stat_time = datetime.fromtimestamp(last_stat_time, tz=self.local_tz)
+                elif isinstance(last_stat_time, datetime):
+                    # Convert to UTC for API call
+                    if last_stat_time.tzinfo is None:
+                        last_stat_time = last_stat_time.replace(tzinfo=self.local_tz)
+                else:
+                    # Fallback: parse as ISO string if it's a string
+                    if isinstance(last_stat_time, str):
+                        last_stat_time = datetime.fromisoformat(last_stat_time)
+                        if last_stat_time.tzinfo is None:
+                            last_stat_time = last_stat_time.replace(tzinfo=self.local_tz)
+                
+                start_time = last_stat_time.astimezone(self.local_tz).replace(hour=0, minute=0, second=0, microsecond=0)
+                
                 # Fetch data from last recorded time to end_time in chunks
                 hours_history_fetched += await self._fetch_data_in_chunks(
-                    start_time, end_time, max_days_per_run
+                    start_time, end_time, max_days_per_run, 0
                 )
 
             else:
@@ -500,6 +512,9 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                 while True:
                     # Calculate chunk start time (5 days before current_end)
                     chunk_start = current_end - timedelta(days=max_days_per_run)
+                    
+                    # Set always chunk_start to start of day
+                    chunk_start = chunk_start.replace(hour=0, minute=0, second=0, microsecond=0)
 
                     try:
                         # Fetch data for this chunk
