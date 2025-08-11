@@ -6,7 +6,7 @@ The API seems to provide prices until 11pm of that day. After 2pm it provides pr
 
 This integration will poll the API every hour (full hour) and update the sensors accordingly.
 
-Additionaly it fetches the data for electricty contract and electricity usage for it and stores it in the statistical data, so that it can be referenced and used in Home Assistant Energy ![Home assistant Energy Ostrom](ostrom-usage-history.png?raw=true)
+Additionaly it fetches the data for electricty contract and electricity usage for it and stores it in the statistical data, so that it can be referenced and used in Home Assistant Energy ![Home assistant Energy Ostrom](images/ostrom-usage-history.png?raw=true)
 
 ## ⚙️ Sensors
 
