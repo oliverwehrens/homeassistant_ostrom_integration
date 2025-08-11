@@ -496,18 +496,18 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                 last_stats_time = last_stat_entry["start"]
                 
                 # Convert timestamp to datetime if it's a float/int
-                if isinstance(last_stat_time, (int, float)):
-                    last_stat_time = datetime.fromtimestamp(last_stat_time, tz=self.local_tz)
-                elif isinstance(last_stat_time, datetime):
+                if isinstance(last_stats_time, (int, float)):
+                    last_stats_time = datetime.fromtimestamp(last_stats_time, tz=self.local_tz)
+                elif isinstance(last_stats_time, datetime):
                     # Convert to UTC for API call
-                    if last_stat_time.tzinfo is None:
-                        last_stat_time = last_stat_time.replace(tzinfo=self.local_tz)
+                    if last_stats_time.tzinfo is None:
+                        last_stats_time = last_stats_time.replace(tzinfo=self.local_tz)
                 else:
                     # Fallback: parse as ISO string if it's a string
-                    if isinstance(last_stat_time, str):
-                        last_stat_time = datetime.fromisoformat(last_stat_time)
-                        if last_stat_time.tzinfo is None:
-                            last_stat_time = last_stat_time.replace(tzinfo=self.local_tz)
+                    if isinstance(last_stats_time, str):
+                        last_stats_time = datetime.fromisoformat(last_stats_time)
+                        if last_stats_time.tzinfo is None:
+                            last_stats_time = last_stats_time.replace(tzinfo=self.local_tz)
                 
                 # def statistics_during_period(
                 #     hass: HomeAssistant,
@@ -529,7 +529,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                     {"sum"},
                 )
                 consumption_sum = cast(float, stats[statistic_id][0]["sum"])
-                start_time = last_stat_time.astimezone(self.local_tz) + timedelta(hours=1)
+                start_time = last_stats_time.astimezone(self.local_tz) + timedelta(hours=1)
             
                 # Fetch data from last recorded time to end_time in chunks
                 consumption_data_all = await self._fetch_data_in_chunks(
