@@ -28,7 +28,7 @@ from .auth import get_access_token
 from homeassistant.helpers.entity import DeviceInfo
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(minutes=30)  # Update more frequently for better graphs
+SCAN_INTERVAL_MIN = 10  # Update more frequently for better graphs
 MAX_DAYS_PER_REQUEST = 30 # Max days to use when fetching historical usage data
 
 class PowerPriceData:
@@ -124,7 +124,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         """Initialize coordinator."""
         # Calculate time until next hour
         now = dt.now()
-        next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        next_hour = (now + timedelta(minutes=SCAN_INTERVAL_MIN)).replace(minute=0, second=0, microsecond=0)
         # Set initial update interval to time until next hour
         initial_update_interval = (next_hour - now).total_seconds()
 
@@ -159,7 +159,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Starting data update for Ostrom integration")
             
             # After each update, set the update interval to 1 hour
-            self.update_interval = timedelta(hours=1)
+            self.update_interval = timedelta(minutes=SCAN_INTERVAL_MIN)
             
             if not self._access_token or datetime.now(ZoneInfo("UTC")) >= self._token_expiration:
                 _LOGGER.info("Access token expired or missing, requesting new token")
@@ -338,7 +338,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                 sum_overall = sum_overall + (kwh * 1000)  # Convert kWh to Wh for statistics
                 
                 # Create statistic data point for this hour's consumption
-                _LOGGER.debug("Creating statistic data point for %s: %s kWh : %s Wh", timestamp, kwh, sum_overall)
+                # _LOGGER.debug("Creating statistic data point for %s: %s kWh : %s Wh", timestamp, kwh, sum_overall)
 
                 statistics.append(
                     StatisticData(
@@ -374,6 +374,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         """Fetch data in chunks of maximum max_days_per_chunk days."""
         current_start = start_time
         consumption_data_all = []
+        _LOGGER.warning("Fetching data in chunks from %s to %s", current_start, end_time)
 
         while current_start < end_time:
             # Calculate chunk end time (max_days_per_chunk days after current_start or end_time, whichever is smaller)
@@ -508,7 +509,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                         last_stats_time = datetime.fromisoformat(last_stats_time)
                         if last_stats_time.tzinfo is None:
                             last_stats_time = last_stats_time.replace(tzinfo=self.local_tz)
-                
+                _LOGGER.warning("Using last recorded time: %s", last_stats_time)
                 # def statistics_during_period(
                 #     hass: HomeAssistant,
                 #     start_time: datetime,
@@ -529,7 +530,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                     {"sum"},
                 )
                 consumption_sum = cast(float, stats[statistic_id][0]["sum"])
-                start_time = last_stats_time.astimezone(self.local_tz) + timedelta(hours=1)
+                start_time = last_stats_time.astimezone(self.local_tz) - timedelta(hours=1)
             
                 # Fetch data from last recorded time to end_time in chunks
                 consumption_data_all = await self._fetch_data_in_chunks(
