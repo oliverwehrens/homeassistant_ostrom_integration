@@ -1,30 +1,35 @@
+import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
 import aiohttp
 from homeassistant.components.sensor import (
-    SensorEntity,
-    SensorStateClass,
-    SensorDeviceClass,
+    SensorEntity, SensorStateClass, SensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
+    CoordinatorEntity, DataUpdateCoordinator, UpdateFailed,
 )
-from homeassistant.const import CURRENCY_EURO
+from homeassistant.const import CURRENCY_EURO, UnitOfEnergy
 from homeassistant.util import dt
+from homeassistant.components.recorder import get_instance
+from homeassistant.components.recorder.models import (
+    StatisticData, StatisticMetaData, StatisticMeanType
+)
+from homeassistant.components.recorder.statistics import (
+    async_import_statistics, async_add_external_statistics,
+    get_last_statistics, statistics_during_period)
 
 from . import DOMAIN
 from .auth import get_access_token
 from homeassistant.helpers.entity import DeviceInfo
 
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(minutes=30)  # Update more frequently for better graphs
+SCAN_INTERVAL_MIN = 10  # Update more frequently for better graphs
+MAX_DAYS_PER_REQUEST = 30 # Max days to use when fetching historical usage data
 
 class PowerPriceData:
     """Stores power price data for forecasting."""
@@ -119,7 +124,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         """Initialize coordinator."""
         # Calculate time until next hour
         now = dt.now()
-        next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        next_hour = (now + timedelta(minutes=SCAN_INTERVAL_MIN)).replace(minute=0, second=0, microsecond=0)
         # Set initial update interval to time until next hour
         initial_update_interval = (next_hour - now).total_seconds()
 
@@ -146,6 +151,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             model="Price Monitoring",
             sw_version="0.8",
         )
+        self.contract_id = None
 
     async def _async_update_data(self) -> PowerPriceData:
         """Fetch and process price data with proper error handling."""
@@ -153,7 +159,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Starting data update for Ostrom integration")
             
             # After each update, set the update interval to 1 hour
-            self.update_interval = timedelta(hours=1)
+            self.update_interval = timedelta(minutes=SCAN_INTERVAL_MIN)
             
             if not self._access_token or datetime.now(ZoneInfo("UTC")) >= self._token_expiration:
                 _LOGGER.info("Access token expired or missing, requesting new token")
@@ -161,6 +167,12 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
             raw_data = await self._fetch_prices()
             processed_data = self._process_price_data(raw_data)
+            
+            if self.contract_id is None:
+                self.contract_id = await self._fetch_contracts()
+            
+            await self._fetch_historical_data_if_needed()
+
             _LOGGER.debug("Successfully updated Ostrom price data")
             return processed_data
         except Exception as err:
@@ -220,6 +232,317 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                 response.raise_for_status()
                 data = await response.json()
                 return data["data"]
+
+    async def _fetch_contracts(self):
+        """Fetch available contracts and get the first electricity contract ID."""
+        url = f"https://{self._env_prefix}/contracts"
+        headers = {"Authorization": f"Bearer {self._access_token}"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                response.raise_for_status()
+                data = await response.json()
+
+                # Find the first active electricity contract
+                for contract in data.get("data", []):
+                    if (
+                        contract.get("type") == "ELECTRICITY"
+                        and contract.get("status") == "ACTIVE"
+                    ):
+                        return contract.get("id")
+
+                return None
+
+    def _calculate_end_time(self, delta_hours: int = 24) -> datetime:
+        """Calculate end time based on current time minus delta hours, rounded to hour."""
+        now = datetime.now(self.local_tz)
+        end_time = now - timedelta(hours=delta_hours)
+        return end_time.replace(minute=0, second=0, microsecond=0)
+
+    async def _fetch_consumption(self, start_datetime=None, end_datetime=None):
+        """Fetch energy consumption data for a specific time range."""
+        if not self.contract_id:
+            _LOGGER.warning("No contract ID available for consumption data")
+            return None
+
+        # Calculate default start and end times if not provided
+        if start_datetime is None or end_datetime is None:
+            end_time = self._calculate_end_time(24)  # 24h ago from now
+            start_time = end_time - timedelta(hours=1)  # 1 hour before end_time
+
+            if start_datetime is None:
+                start_datetime = start_time
+            if end_datetime is None:
+                end_datetime = end_time
+
+        # Ensure both datetimes are in UTC
+        if start_datetime.tzinfo is None:
+            start_datetime = start_datetime.replace(tzinfo=self.local_tz)
+        else:
+            start_datetime = start_datetime.astimezone(self.local_tz)
+
+        if end_datetime.tzinfo is None:
+            end_datetime = end_datetime.replace(tzinfo=self.local_tz)
+        else:
+            end_datetime = end_datetime.astimezone(self.local_tz)
+
+        url = f"https://{self._env_prefix}/contracts/{self.contract_id}/energy-consumption"
+        headers = {"Authorization": f"Bearer {self._access_token}"}
+        params = {
+            "startDate": start_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "endDate": end_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "resolution": "HOUR",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params) as response:
+                response.raise_for_status()
+                data = await response.json()
+                return data
+
+    async def _store_usage_to_stats(self, consumption_data, initial_sum = 0):
+        """Process historical consumption data and add hourly statistics to recorder."""
+        # if not isinstance(consumption_data, dict) or "data" not in consumption_data:
+        #     return
+
+        # hourly_data = consumption_data["data"]
+        hourly_data = consumption_data
+        if not isinstance(hourly_data, list) or len(hourly_data) == 0:
+            return
+
+        # Create statistics for hourly consumption
+        statistic_id = f"{DOMAIN}:ostrom_hourly_consumption_energy"
+
+        # Prepare statistics data - each hour is an individual measurement
+        statistics = []
+        sum_overall = initial_sum
+        
+        for entry in hourly_data:
+            if not isinstance(entry, dict) or "date" not in entry or "kWh" not in entry:
+                continue
+
+            try:
+                # Parse timestamp
+                date_str = entry["date"]
+                if date_str.endswith("Z"):
+                    date_str = date_str[:-1] + "+00:00"
+                timestamp = datetime.fromisoformat(date_str)
+                # Ensure timestamp has timezone info
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=self.local_tz)
+                else:
+                    timestamp = timestamp.astimezone(self.local_tz)
+                    
+                # Each hour's consumption as individual statistic
+                kwh = cast(float, entry["kWh"])
+                sum_overall = sum_overall + (kwh * 1000)  # Convert kWh to Wh for statistics
+                
+                # Create statistic data point for this hour's consumption
+                # _LOGGER.debug("Creating statistic data point for %s: %s kWh : %s Wh", timestamp, kwh, sum_overall)
+
+                statistics.append(
+                    StatisticData(
+                        start=timestamp,
+                        state=kwh,
+                        sum=sum_overall,  # Use sum for energy consumption
+                    )
+                )
+
+            except Exception as e:
+                _LOGGER.warning("Error processing consumption entry: %s", e)
+
+        if statistics:
+            # Add statistics to recorder
+            metadata = StatisticMetaData(
+                mean_type=StatisticMeanType.NONE,
+                has_sum=True,
+                name="Ostrom Hourly Energy Consumption",
+                source=DOMAIN,
+                statistic_id=statistic_id,
+                unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+            )
+
+            try:
+                async_add_external_statistics(self.hass, metadata, statistics)
+                _LOGGER.warning(
+                    "Added %d hourly consumption statistics", len(statistics)
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to add hourly statistics: %s", e)
+
+    async def _fetch_data_in_chunks(self, start_time, end_time, max_days_per_chunk):
+        """Fetch data in chunks of maximum max_days_per_chunk days."""
+        current_start = start_time
+        consumption_data_all = []
+        _LOGGER.warning("Fetching data in chunks from %s to %s", current_start, end_time)
+
+        while current_start < end_time:
+            # Calculate chunk end time (max_days_per_chunk days after current_start or end_time, whichever is smaller)
+            chunk_end = min(
+                (current_start + timedelta(days=max_days_per_chunk)).replace(hour=23, minute=59, second=59, microsecond=0), end_time
+            )
+
+            try:
+                _LOGGER.warning("Fetching data chunk from %s to %s", current_start, chunk_end)
+                # Fetch data for this chunk
+                consumption_data = await self._fetch_consumption(
+                    current_start, chunk_end
+                )
+
+                if consumption_data and consumption_data.get("data"):
+                    # Count hours fetched
+                    hourly_data = consumption_data["data"]
+                    consumption_data_all.extend(hourly_data)
+
+                    _LOGGER.warning(
+                        "Fetched %d hours of delta data from %s to %s",
+                        len(hourly_data),
+                        current_start,
+                        chunk_end,
+                    )
+
+                # Move to the next chunk
+                current_start = chunk_end
+
+            except Exception as e:
+                _LOGGER.warning(
+                    "Error fetching delta chunk from %s to %s: %s",
+                    current_start,
+                    chunk_end,
+                    e,
+                )
+                # Move to next chunk even if this one failed
+                current_start = chunk_end
+
+            # Avoid throttling
+            await asyncio.sleep(3)
+
+        return consumption_data_all
+
+    async def _fetch_historical_data_if_needed(self):
+        """Check if historical data exists and fetch missing data walking backwards from yesterday."""
+        if not self.contract_id:
+            _LOGGER.warning("No contract ID available for historical data fetching")
+            return
+
+        try:
+            _LOGGER.debug("Fetching historical data for %s", self.contract_id)
+
+            # Check if we have any statistics for this sensor
+            statistic_id = f"{DOMAIN}:ostrom_hourly_consumption_energy"
+
+            # Get the last recorded statistic to see what data we already have
+            recorder = get_instance(self.hass)
+            last_stats = await recorder.async_add_executor_job(
+                get_last_statistics, self.hass, 1, statistic_id, True, set()
+            )
+            
+            end_time = self._calculate_end_time(24)  # 24h ago from now
+            
+            consumption_sum = 0.0
+            last_stats_time = None
+            consumption_data_all = []
+            
+            if not last_stats:
+                _LOGGER.debug("Updating statistic for the first time")
+                # usage = await self._async_get_energy_usage(meter)
+                consumption_sum = 0.0
+                last_stats_time = None
+                
+                # Start from end_time and go backwards in chunks
+                current_end = end_time
+
+                while True:
+                    # Calculate chunk start time
+                    chunk_start = current_end - timedelta(days=30) # 1 months chunks
+                    
+                    # Set always chunk_start to start of day
+                    chunk_start = chunk_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+                    try:
+                        # Fetch data for this chunk
+                        consumption_data = await self._fetch_data_in_chunks(
+                            chunk_start, current_end, MAX_DAYS_PER_REQUEST
+                        )
+                        if len(consumption_data) == 0:
+                            break;
+
+                        consumption_data_all.extend(consumption_data)
+
+                        _LOGGER.debug(
+                            "Fetched %d hours of data from %s to %s",
+                            len(consumption_data),
+                            chunk_start,
+                            current_end,
+                        )
+
+                        # Move to the next chunk (earlier time period)
+                        current_end = chunk_start
+
+                    except Exception as e:
+                        _LOGGER.error(
+                            "Error fetching historical chunk from %s to %s: %s",
+                            chunk_start,
+                            current_end,
+                            e,
+                        )
+                        break
+                # Sort consumption data by timestamp
+                consumption_data_all.sort(key=lambda x: x["date"])
+                
+            else:
+                last_stat_entry = list(last_stats.values())[0][
+                    0
+                ]  # First (and only) statistic entry
+                last_stats_time = last_stat_entry["start"]
+                
+                # Convert timestamp to datetime if it's a float/int
+                if isinstance(last_stats_time, (int, float)):
+                    last_stats_time = datetime.fromtimestamp(last_stats_time, tz=self.local_tz)
+                elif isinstance(last_stats_time, datetime):
+                    # Convert to UTC for API call
+                    if last_stats_time.tzinfo is None:
+                        last_stats_time = last_stats_time.replace(tzinfo=self.local_tz)
+                else:
+                    # Fallback: parse as ISO string if it's a string
+                    if isinstance(last_stats_time, str):
+                        last_stats_time = datetime.fromisoformat(last_stats_time)
+                        if last_stats_time.tzinfo is None:
+                            last_stats_time = last_stats_time.replace(tzinfo=self.local_tz)
+                _LOGGER.debug("Using last recorded time: %s", last_stats_time)
+                # def statistics_during_period(
+                #     hass: HomeAssistant,
+                #     start_time: datetime,
+                #     end_time: datetime | None,
+                #     statistic_ids: set[str] | None,
+                #     period: Literal["5minute", "day", "hour", "week", "month"],
+                #     units: dict[str, str] | None,
+                #     types: set[Literal["change", "last_reset", "max", "mean", "min", "state", "sum"]],
+                # ) -> dict[str, list[StatisticsRow]]
+                stats = await recorder.async_add_executor_job(
+                    statistics_during_period,
+                    self.hass,
+                    last_stats_time,
+                    None,
+                    {statistic_id},
+                    "hour",
+                    None,
+                    {"sum"},
+                )
+                consumption_sum = cast(float, stats[statistic_id][0]["sum"])
+                start_time = last_stats_time.astimezone(self.local_tz) - timedelta(hours=1)
+            
+                # Fetch data from last recorded time to end_time in chunks
+                consumption_data_all = await self._fetch_data_in_chunks(
+                    start_time, end_time, MAX_DAYS_PER_REQUEST
+                )
+                
+            # Store the fetched data
+            await self._store_usage_to_stats(consumption_data_all, initial_sum=consumption_sum)
+
+        except Exception as e:
+            _LOGGER.error("Error in historical data fetching: %s", e)
+
 
 class OstromForecastSensor(CoordinatorEntity, SensorEntity):
     """Sensor for price forecasting."""
