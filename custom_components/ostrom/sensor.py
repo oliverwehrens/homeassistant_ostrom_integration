@@ -426,7 +426,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             return
 
         try:
-            _LOGGER.warning("Fetching historical data for %s", self.contract_id)
+            _LOGGER.debug("Fetching historical data for %s", self.contract_id)
 
             # Check if we have any statistics for this sensor
             statistic_id = f"{DOMAIN}:ostrom_hourly_consumption_energy"
@@ -469,7 +469,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
                         consumption_data_all.extend(consumption_data)
 
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             "Fetched %d hours of data from %s to %s",
                             len(consumption_data),
                             chunk_start,
@@ -480,7 +480,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                         current_end = chunk_start
 
                     except Exception as e:
-                        _LOGGER.warning(
+                        _LOGGER.error(
                             "Error fetching historical chunk from %s to %s: %s",
                             chunk_start,
                             current_end,
@@ -509,7 +509,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                         last_stats_time = datetime.fromisoformat(last_stats_time)
                         if last_stats_time.tzinfo is None:
                             last_stats_time = last_stats_time.replace(tzinfo=self.local_tz)
-                _LOGGER.warning("Using last recorded time: %s", last_stats_time)
+                _LOGGER.debug("Using last recorded time: %s", last_stats_time)
                 # def statistics_during_period(
                 #     hass: HomeAssistant,
                 #     start_time: datetime,
@@ -790,138 +790,3 @@ class OstromHighestPriceTimeSensor(CoordinatorEntity, SensorEntity):
             "is_today": local_time.date() == datetime.now(self.coordinator.local_tz).date(),
             "is_tomorrow": local_time.date() == (datetime.now(self.coordinator.local_tz) + timedelta(days=1)).date()
         }
-        
-# class OstromHistoricalUsageSensor(CoordinatorEntity, SensorEntity):
-#     """Sensor for historical energy usage (24h delayed)."""
-#     def __init__(self, coordinator, entry):
-#         super().__init__(coordinator)
-#         self._attr_has_entity_name = True
-#         self._attr_translation_key = "ostrom_hourly_consumption_energy"
-#         self._attr_unique_id = f"ostrom_hourly_consumption_energy"
-#         self._attr_state_class = SensorStateClass.TOTAL
-#         self._attr_device_class = SensorDeviceClass.ENERGY
-#         self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-#         self._attr_suggested_display_precision = 3
-#         self._attr_device_info = coordinator.device_info
-#         self._last_data_timestamp = None
-        
-#     async def async_update(self):
-#         current_value = await self.get_energy_data()
-#         actual_timestamp = self._last_data_timestamp
-        
-#         # Set state with historical timestamp
-#         self.hass.states.async_set(
-#             self.entity_id,
-#             current_value,
-#             attributes=self._attr_extra_state_attributes,
-#             last_updated=actual_timestamp  # Key part!
-#         )
-
-#     async def import_historical_energy_data(self, energy_readings):
-#         """Import historical data as statistics"""
-#         statistics = []
-#         for od in energy_readings:
-#             date_str = od.get("date")
-#             timestamp = None
-#             if date_str:
-#                 # Ensure ISO format with timezone
-#                 if date_str.endswith('Z'):
-#                     date_str = date_str[:-1] + '+00:00'
-#                 timestamp = datetime.fromisoformat(date_str)
-                
-#                 value = (round(od.get("kWh", 0), 3) if od.get("kWh") else None)
-#                 statistics.append({
-#                     "start": timestamp,
-#                     "state": value,
-#                     "sum": value if value else None,
-#                 })
-        
-#         metadata = {
-#             "statistic_id": self.entity_id,
-#             "name": self.name,
-#             "unit_of_measurement": "kWh",
-#             "has_mean": False,
-#             "has_sum": False,
-#             "source": "recorder",
-#         }
-        
-#         await async_import_statistics(self.hass, metadata, statistics)
-        
-#     async def update_historical_batch(self):
-#         """Insert historical states with correct timestamps"""
-        
-#         historical_data = await self.get_historical_energy_data()
-        
-#         # Create State objects with historical timestamps
-#         states_to_add = []
-#         for timestamp, value in historical_data:
-#             state = State(
-#                 entity_id=self.entity_id,
-#                 state=str(value),
-#                 attributes=self._attr_extra_state_attributes,
-#                 last_changed=timestamp,
-#                 last_updated=timestamp,
-#                 context=self._context
-#             )
-#             states_to_add.append(state)
-        
-#         # Insert into recorder
-#         recorder = get_instance(self.hass)
-#         if recorder and recorder.enabled:
-#             await recorder.async_add_executor_job(
-#                 self._insert_states, states_to_add
-#             )
-
-#     def _insert_states(self, states):
-#         """Insert states in executor thread"""
-#         recorder = get_instance(self.hass)
-#         with session_scope(session=recorder.get_session()) as session:
-#             for state in states:
-#                 recorder._insert_state(session, state)
-        
-#     async def get_energy_data(self) -> Optional[float]:
-#         """Return the energy usage from 24 hours ago."""
-        
-#         if not self.coordinator.data or not hasattr(self.coordinator.data, "historical_usage_data"):
-#             return None
-
-#         _LOGGER.debug("historical_usage_data: %s", self.coordinator.data.historical_usage_data)
-
-#         historical_data = None
-#         usage_data_array = []
-#         if self.coordinator.data.historical_usage_data and "data" in self.coordinator.data.historical_usage_data:
-#             usage_data_array = self.coordinator.data.historical_usage_data["data"]
-#             if usage_data_array and len(usage_data_array) > 0:
-#                 historical_data = usage_data_array[-1]  # Get the last element
-
-#         await self.import_historical_energy_data(usage_data_array)
-        
-#         if not historical_data:
-#             return None
-
-#         # Parse the timestamp from the date string
-#         date_str = historical_data.get("date")
-#         if date_str:
-#             # Ensure ISO format with timezone
-#             if date_str.endswith('Z'):
-#                 date_str = date_str[:-1] + '+00:00'
-#             self._last_data_timestamp = datetime.fromisoformat(date_str)
-#         else:
-#             self._last_data_timestamp = None
-#         _LOGGER.debug("Last data timestamp last value: %s", self._last_data_timestamp)
-#         _LOGGER.debug("Historical data kwh last value: %s", historical_data.get("kWh"))
-#         return (round(historical_data.get("kWh", 0), 3) if historical_data.get("kWh") else None)
-    
-#     @property
-#     def native_value(self) -> Optional[float]:
-#         """Return the energy usage from 24 hours ago."""
-#         return self.get_energy_data()
-
-#     @property
-#     def extra_state_attributes(self) -> Dict[str, Any]:
-#         """Return additional state attributes."""
-#         return {
-#             "note": "Data is 24 hours behind real-time",
-#             "latest_data_timestamp": self._last_data_timestamp,
-#             "delay_hours": 24
-#         }
