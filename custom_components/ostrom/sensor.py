@@ -176,9 +176,49 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
             _LOGGER.debug("Successfully updated Ostrom price data")
             return processed_data
+        except aiohttp.ClientResponseError as err:
+            if err.status == 429:
+                _LOGGER.warning(
+                    "Ostrom API rate limit reached (HTTP 429). "
+                    "Keeping last valid data if available."
+                )
+                if self.data is not None:
+                    return self.data
+
+            _LOGGER.error(
+                "HTTP error while fetching Ostrom data: %s",
+                err,
+                exc_info=True,
+            )
+            raise UpdateFailed(f"HTTP error fetching Ostrom data. {err}") from err
+
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            _LOGGER.warning(
+                "Network or timeout error while fetching Ostrom data: %s",
+                err,
+                exc_info=True,
+            )
+
+            if self.data is not None:
+                _LOGGER.warning("Keeping last valid Ostrom data despite the error")
+                return self.data
+
+            raise UpdateFailed(f"Network error fetching Ostrom data: {err}") from err
+
         except Exception as err:
-            _LOGGER.error("Error updating Ostrom price data: %s", err, exc_info=True)
-            raise UpdateFailed(f"Error fetching data: {err}") from err
+            _LOGGER.error(
+                "Unexpected error updating Ostrom price data",
+                exc_info=True,
+            )
+
+            if self.data is not None:
+                _LOGGER.warning(
+                    "Unexpected error, but cached Ostrom data is available. "
+                    "Continuing with last known values."
+                )
+                return self.data
+
+            raise UpdateFailed(f"Unexpected error fetching Ostrom data: {err}") from err
 
     def _process_price_data(self, prices) -> PowerPriceData:
         """Process the raw price data into PowerPriceData structure."""
