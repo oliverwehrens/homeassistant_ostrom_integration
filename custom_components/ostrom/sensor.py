@@ -257,13 +257,13 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
     async def _fetch_prices(self):
         """Fetch price data including future prices."""
-        now = datetime.now(ZoneInfo("UTC")).replace(minute=0, second=0, microsecond=0)
+        today = datetime.now(self.local_tz).replace(hour=0,minute=0, second=0, microsecond=0).astimezone(ZoneInfo("UTC"))
         url = f"https://{self._env_prefix}/spot-prices"
         
         headers = {"Authorization": f"Bearer {self._access_token}"}
-        tomorrow_end = (now + timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_end = today + timedelta(days=2)
         params = {
-            "startDate": now.strftime("%Y-%m-%dT%H:00:00.000Z"),
+            "startDate": today.strftime("%Y-%m-%dT%H:00:00.000Z"),
             "endDate": tomorrow_end.strftime("%Y-%m-%dT%H:00:00.000Z"),
             "resolution": "HOUR",
             "zip": self.zip_code
