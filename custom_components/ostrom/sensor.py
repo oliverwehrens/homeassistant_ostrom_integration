@@ -193,14 +193,14 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"HTTP error fetching Ostrom data. {err}") from err
 
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            _LOGGER.warning(
+            _LOGGER.error(
                 "Network or timeout error while fetching Ostrom data: %s",
                 err,
                 exc_info=True,
             )
 
             if self.data is not None:
-                _LOGGER.warning("Keeping last valid Ostrom data despite the error")
+                _LOGGER.info("Keeping last valid Ostrom data despite the error")
                 return self.data
 
             raise UpdateFailed(f"Network error fetching Ostrom data: {err}") from err
@@ -212,7 +212,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             )
 
             if self.data is not None:
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "Unexpected error, but cached Ostrom data is available. "
                     "Continuing with last known values."
                 )
@@ -397,7 +397,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                 )
 
             except Exception as e:
-                _LOGGER.warning("Error processing consumption entry: %s", e)
+                _LOGGER.error("Error processing consumption entry: %s", e)
 
         if statistics:
             # Add statistics to recorder
@@ -413,7 +413,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
 
             try:
                 async_add_external_statistics(self.hass, metadata, statistics)
-                _LOGGER.warning(
+                _LOGGER.info(
                     "Added %d hourly consumption statistics", len(statistics)
                 )
             except Exception as e:
@@ -423,7 +423,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
         """Fetch data in chunks of maximum max_days_per_chunk days."""
         current_start = start_time
         consumption_data_all = []
-        _LOGGER.warning("Fetching data in chunks from %s to %s", current_start, end_time)
+        _LOGGER.info("Fetching data in chunks from %s to %s", current_start, end_time)
 
         while current_start < end_time:
             # Calculate chunk end time (max_days_per_chunk days after current_start or end_time, whichever is smaller)
@@ -432,7 +432,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
             )
 
             try:
-                _LOGGER.warning("Fetching data chunk from %s to %s", current_start, chunk_end)
+                _LOGGER.debug("Fetching data chunk from %s to %s", current_start, chunk_end)
                 # Fetch data for this chunk
                 consumption_data = await self._fetch_consumption(
                     current_start, chunk_end
@@ -443,7 +443,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                     hourly_data = consumption_data["data"]
                     consumption_data_all.extend(hourly_data)
 
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "Fetched %d hours of delta data from %s to %s",
                         len(hourly_data),
                         current_start,
@@ -454,7 +454,7 @@ class OstromDataCoordinator(DataUpdateCoordinator):
                 current_start = chunk_end
 
             except Exception as e:
-                _LOGGER.warning(
+                _LOGGER.error(
                     "Error fetching delta chunk from %s to %s: %s",
                     current_start,
                     chunk_end,

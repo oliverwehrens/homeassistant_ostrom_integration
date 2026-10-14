@@ -56,7 +56,7 @@ class OstromConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         data=user_input
                     )
                 else:
-                    _LOGGER.warning("Failed to validate Ostrom credentials")
+                    _LOGGER.error("Failed to validate Ostrom credentials")
                     errors["base"] = "cannot_connect"
             except Exception as e:
                 _LOGGER.error("Error during Ostrom validation: %s", str(e), exc_info=True)
